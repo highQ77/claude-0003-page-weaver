@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="zh-Hant">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TW Builder</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/material-darker.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/xml/xml.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/css/css.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/htmlmixed/htmlmixed.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/fold/xml-fold.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/addon/edit/closetag.min.js"></script>
+  <style type="text/tailwindcss">
+    @layer components {
+    .inp { @apply w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500; }
+    .lbl { @apply block text-[11px] text-slate-400 mb-1; }
+    .hbtn { @apply h-8 px-2.5 inline-flex items-center gap-1.5 rounded text-xs text-slate-300 hover:bg-slate-800 hover:text-white disabled:opacity-40 disabled:pointer-events-none; }
+    .seg-btn { @apply h-7 px-3 inline-flex items-center gap-1 rounded text-xs text-slate-400 hover:text-white; }
+    .seg-btn.active { @apply bg-slate-700 text-white; }
+    .tb { @apply h-6 w-6 inline-flex items-center justify-center hover:bg-blue-700; }
+    .panel-h { @apply h-9 shrink-0 px-3 flex items-center justify-between text-[11px] font-semibold tracking-wider uppercase text-slate-400 border-b border-slate-800; }
+  }
+</style>
+  <style>
+    .tree-row.drop-before {
+      box-shadow: inset 0 2px 0 #3b82f6;
+    }
+
+    .tree-row.drop-after {
+      box-shadow: inset 0 -2px 0 #3b82f6;
+    }
+
+    .tree-row.drop-inside {
+      background: rgba(59, 130, 246, .25);
+      outline: 1px solid #3b82f6;
+      outline-offset: -1px;
+    }
+
+    .CodeMirror {
+      height: 100%;
+      font-size: 13px;
+    }
+
+    #drag-ghost {
+      position: fixed;
+      top: -100px;
+      left: -100px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+
+<body class="h-screen flex flex-col bg-slate-900 text-slate-200 text-sm overflow-hidden">
+
+  <header class="h-12 shrink-0 flex items-center gap-3 px-3 border-b border-slate-800 bg-slate-950">
+    <div class="flex items-center gap-2 font-semibold text-white pr-2">
+      <span
+        class="w-6 h-6 rounded bg-gradient-to-br from-sky-400 to-blue-600 inline-flex items-center justify-center text-[11px]">PW</span>
+      PageWeaver
+    </div>
+    <div class="flex gap-0.5 p-0.5 rounded-md bg-slate-800/70">
+      <button class="seg-btn active" data-mode="design">Design</button>
+      <button class="seg-btn" data-mode="code">Code</button>
+    </div>
+    <div class="flex gap-0.5 p-0.5 rounded-md bg-slate-800/70" id="devices">
+      <button class="seg-btn active" data-device="100%" title="桌面">桌面</button>
+      <button class="seg-btn" data-device="768px" title="平板 768px">平板</button>
+      <button class="seg-btn" data-device="375px" title="手機 375px">手機</button>
+    </div>
+    <div class="ml-auto flex items-center gap-1">
+      <button class="hbtn" id="btn-undo" title="復原 (Ctrl+Z)">↶ 復原</button>
+      <button class="hbtn" id="btn-redo" title="重做 (Ctrl+Shift+Z)">↷ 重做</button>
+      <span class="w-px h-5 bg-slate-800 mx-1"></span>
+      <button class="hbtn" id="btn-clear">清空</button>
+      <button class="hbtn" id="btn-preview">預覽</button>
+      <button class="h-8 px-3 rounded bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium" id="btn-export">匯出
+        HTML</button>
+      <div class="text-[12px] text-gray-500 ml-5">claude x William77</div>
+    </div>
+  </header>
+
+  <div class="flex-1 flex min-h-0">
+    <!-- 左側：元件 + 圖層 -->
+    <aside class="w-64 shrink-0 flex flex-col border-r border-slate-800 bg-slate-900">
+      <section class="flex flex-col min-h-0 basis-1/2">
+        <div class="panel-h">元件</div>
+        <div class="p-2 shrink-0"><input id="block-search" class="inp" placeholder="搜尋元件…"></div>
+        <div id="blocks" class="flex-1 overflow-auto px-2 pb-3"></div>
+      </section>
+      <section class="flex flex-col min-h-0 flex-1 border-t border-slate-800">
+        <div class="panel-h">圖層 <span class="normal-case font-normal tracking-normal text-slate-600">可拖曳排序</span></div>
+        <div id="tree" class="flex-1 overflow-auto p-1 text-xs"></div>
+      </section>
+    </aside>
+
+    <!-- 中央：編輯區 -->
+    <main class="flex-1 min-w-0 flex flex-col bg-slate-800/50">
+      <div id="design-pane" class="flex-1 min-h-0 p-4 flex justify-center">
+        <div id="frame-box" class="relative h-full w-full bg-white shadow-2xl transition-[width] duration-300">
+          <iframe id="frame" class="block w-full h-full border-0" title="canvas"></iframe>
+          <div id="overlay" class="absolute inset-0 pointer-events-none overflow-hidden">
+            <div id="ph-parent" class="absolute border-2 border-dashed border-emerald-400/80" style="display:none">
+            </div>
+            <div id="ph" class="absolute bg-emerald-500 rounded-full" style="display:none"></div>
+            <div id="hover-box" class="absolute border border-sky-400" style="display:none">
+              <span id="hover-label"
+                class="absolute -top-4 left-0 px-1 text-[10px] leading-4 bg-sky-500 text-white font-mono rounded-t-sm"></span>
+            </div>
+            <div id="sel-box" class="absolute border-2 border-blue-500" style="display:none"></div>
+            <div id="sel-toolbar"
+              class="absolute flex items-center h-6 bg-blue-600 text-white text-xs shadow rounded-sm pointer-events-auto transition-opacity"
+              style="display:none">
+              <span id="sel-label" class="px-1.5 font-mono"></span>
+              <button class="tb" data-act="parent" title="選取父元素">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                </svg>
+              </button>
+              <span class="tb cursor-move" data-act="drag" draggable="true" title="拖曳移動">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
+                </svg>
+              </span>
+              <button class="tb" data-act="dup" title="複製 (Ctrl+D)">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <rect x="8" y="8" width="13" height="13" rx="2" />
+                  <path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3" />
+                </svg>
+              </button>
+              <button class="tb rounded-r-sm" data-act="del" title="刪除 (Delete)">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="code-pane" class="hidden flex-1 min-h-0 flex-col">
+        <div class="h-9 shrink-0 px-3 flex items-center gap-2 border-b border-slate-800 bg-slate-900 text-xs">
+          <span class="text-slate-400">編輯 &lt;body&gt; 內容，切回 Design 時自動套用</span>
+          <button class="hbtn ml-auto" id="btn-copy">複製</button>
+          <button class="h-7 px-3 rounded bg-blue-600 hover:bg-blue-500 text-white" id="btn-apply">套用變更</button>
+        </div>
+        <div id="code-host" class="flex-1 min-h-0"></div>
+      </div>
+      <div id="breadcrumb"
+        class="h-8 shrink-0 px-3 flex items-center gap-1 border-t border-slate-800 bg-slate-900 text-xs text-slate-400 overflow-x-auto whitespace-nowrap">
+      </div>
+    </main>
+
+    <!-- 右側：屬性 -->
+    <aside class="w-80 shrink-0 flex flex-col border-l border-slate-800 bg-slate-900">
+      <div class="panel-h">屬性</div>
+      <div id="props" class="flex-1 overflow-auto"></div>
+    </aside>
+  </div>
+
+  <div id="drag-ghost" class="px-2 py-1 rounded bg-blue-600 text-white text-xs font-mono"></div>
+  <div id="toast"
+    class="fixed bottom-12 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded bg-slate-700 text-white text-xs shadow-lg opacity-0 transition-opacity pointer-events-none">
+  </div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
